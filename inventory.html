@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory — GreenHaven Nursery</title>
+    <meta name="description" content="Track plant inventory, stock levels, and supply movements">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="app-layout">
+        <aside class="sidebar"></aside>
+        <button class="sidebar-toggle no-print">☰</button>
+
+        <main class="main-content">
+            <div class="page-header">
+                <div>
+                    <h1 class="page-title">Inventory</h1>
+                    <p class="page-subtitle">Track stock levels and supply movements</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-primary" onclick="openModal('addStockModal')">+ Add Stock</button>
+                </div>
+            </div>
+
+            <div class="page-body">
+                <!-- Stats -->
+                <div class="stats-grid" id="invStats">
+                    <div class="skeleton skeleton-card"></div>
+                    <div class="skeleton skeleton-card"></div>
+                    <div class="skeleton skeleton-card"></div>
+                </div>
+
+                <!-- Filter Tabs -->
+                <div class="filter-tabs mb-3">
+                    <button class="filter-tab active" onclick="filterStock(this, 'all')">All Plants</button>
+                    <button class="filter-tab" onclick="filterStock(this, 'low')">⚠️ Low Stock</button>
+                    <button class="filter-tab" onclick="filterStock(this, 'out')">🚫 Out of Stock</button>
+                </div>
+
+                <!-- Stock Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 style="font-size:16px;font-weight:600;">Stock Overview</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-wrapper" id="stockTable">
+                            <div class="skeleton skeleton-row"></div>
+                            <div class="skeleton skeleton-row"></div>
+                            <div class="skeleton skeleton-row"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Inventory Log -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h3 style="font-size:16px;font-weight:600;">📋 Inventory Log</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-wrapper" id="logTable">
+                            <div class="skeleton skeleton-row"></div>
+                            <div class="skeleton skeleton-row"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add Stock Modal -->
+    <div class="modal-overlay" id="addStockModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Add Incoming Stock</h2>
+                <button class="modal-close" onclick="closeModal('addStockModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="stockPlant">Select Plant</label>
+                    <select id="stockPlant" class="form-control" required></select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="stockQty">Quantity</label>
+                        <input type="number" id="stockQty" class="form-control" min="1" placeholder="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="stockType">Type</label>
+                        <select id="stockType" class="form-control">
+                            <option value="incoming">📥 Incoming</option>
+                            <option value="sold">📤 Sold</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="stockNote">Note (optional)</label>
+                    <input type="text" id="stockNote" class="form-control" placeholder="e.g. Supplier delivery">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('addStockModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="addStock()">Add Stock</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let plantsData = [];
+        let currentStockFilter = 'all';
+
+        async function loadInventory() {
+            try {
+                const [plantsRes, logsRes] = await Promise.all([
+                    api.get('plants.php?limit=500'),
+                    api.get('inventory.php?limit=50')
+                ]);
+
+                plantsData = plantsRes.data || [];
+
+                // Stats
+                const total = plantsData.length;
+                const low = plantsData.filter(p => p.quantity > 0 && p.quantity <= p.low_stock_threshold).length;
+                const out = plantsData.filter(p => p.quantity <= 0).length;
+
+                document.getElementById('invStats').innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-icon green">📦</div>
+                        <div class="stat-info"><h3>${total}</h3><p>Total Plants</p></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">⚠️</div>
+                        <div class="stat-info"><h3>${low}</h3><p>Low Stock</p></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red">🚫</div>
+                        <div class="stat-info"><h3>${out}</h3><p>Out of Stock</p></div>
+                    </div>
+                `;
+
+                renderStockTable(plantsData);
+
+                // Populate plant dropdown
+                document.getElementById('stockPlant').innerHTML = plantsData.map(p =>
+                    `<option value="${p.id}">${p.name} (Stock: ${p.quantity})</option>`
+                ).join('');
+
+                // Logs
+                const logs = logsRes.data || [];
+                if (logs.length > 0) {
+                    document.getElementById('logTable').innerHTML = `
+                        <table>
+                            <thead><tr><th>Plant</th><th>Type</th><th>Qty</th><th>Note</th><th>Date</th></tr></thead>
+                            <tbody>
+                                ${logs.map(l => `
+                                    <tr>
+                                        <td>${l.plant_name || 'Unknown'}</td>
+                                        <td><span class="badge-status ${l.type === 'incoming' ? 'completed' : 'pending'}">${l.type === 'incoming' ? '📥 Incoming' : '📤 Sold'}</span></td>
+                                        <td><strong>${l.quantity}</strong></td>
+                                        <td class="text-muted">${l.note || '—'}</td>
+                                        <td class="text-muted">${formatDateTime(l.created_at)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                } else {
+                    document.getElementById('logTable').innerHTML = '<div class="empty-state"><p>No inventory logs yet</p></div>';
+                }
+            } catch (err) {
+                showToast('Failed to load inventory', 'error');
+            }
+        }
+
+        function renderStockTable(plants) {
+            if (plants.length === 0) {
+                document.getElementById('stockTable').innerHTML = '<div class="empty-state"><p>No plants found</p></div>';
+                return;
+            }
+            document.getElementById('stockTable').innerHTML = `
+                <table>
+                    <thead><tr><th>Plant</th><th>Category</th><th>Price</th><th>Quantity</th><th>Threshold</th><th>Status</th></tr></thead>
+                    <tbody>
+                        ${plants.map(p => `
+                            <tr>
+                                <td><strong>${p.name}</strong></td>
+                                <td>${getCategoryBadge(p.category)}</td>
+                                <td>${formatCurrency(p.price)}</td>
+                                <td><strong>${p.quantity}</strong></td>
+                                <td class="text-muted">${p.low_stock_threshold}</td>
+                                <td>${getStockBadge(p.quantity, p.low_stock_threshold)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function filterStock(btn, type) {
+            document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentStockFilter = type;
+
+            let filtered = plantsData;
+            if (type === 'low') filtered = plantsData.filter(p => p.quantity > 0 && p.quantity <= p.low_stock_threshold);
+            if (type === 'out') filtered = plantsData.filter(p => p.quantity <= 0);
+            renderStockTable(filtered);
+        }
+
+        async function addStock() {
+            const plantId = document.getElementById('stockPlant').value;
+            const qty = parseInt(document.getElementById('stockQty').value);
+            const type = document.getElementById('stockType').value;
+            const note = document.getElementById('stockNote').value;
+
+            if (!plantId || !qty || qty <= 0) {
+                showToast('Please fill in all required fields', 'warning');
+                return;
+            }
+
+            try {
+                await api.post('inventory.php', { plant_id: parseInt(plantId), quantity: qty, type, note });
+                showToast('Stock updated!', 'success');
+                closeModal('addStockModal');
+                loadInventory();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        }
+
+        loadInventory();
+    </script>
+</body>
+
+</html>

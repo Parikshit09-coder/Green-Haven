@@ -1,0 +1,7 @@
+.git
+.env
+node_modules
+*.md
+deployment.txt
+database/fix_constraints.sql
+api/fix_db.php

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — GreenHaven Nursery</title>
+    <meta name="description" content="Dashboard overview for GreenHaven Plant Nursery Management System">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="app-layout">
+        <aside class="sidebar"></aside>
+        <button class="sidebar-toggle no-print">☰</button>
+
+        <main class="main-content">
+            <div class="page-header">
+                <div>
+                    <h1 class="page-title">Dashboard</h1>
+                    <p class="page-subtitle">Welcome back! Here's your nursery overview.</p>
+                </div>
+                <div class="header-actions">
+                    <span id="currentDate" class="text-muted" style="font-size:13px;"></span>
+                </div>
+            </div>
+
+            <div class="page-body">
+                <!-- KPI Stats -->
+                <div class="stats-grid" id="statsGrid">
+                    <div class="skeleton skeleton-card"></div>
+                    <div class="skeleton skeleton-card"></div>
+                    <div class="skeleton skeleton-card"></div>
+                    <div class="skeleton skeleton-card"></div>
+                </div>
+
+                <div class="grid-2">
+                    <!-- Recent Orders -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 style="font-size:16px;font-weight:600;">Recent Orders</h3>
+                            <a href="orders.html" class="btn btn-sm btn-secondary">View All</a>
+                        </div>
+                        <div class="card-body" id="recentOrders">
+                            <div class="skeleton skeleton-row"></div>
+                            <div class="skeleton skeleton-row"></div>
+                            <div class="skeleton skeleton-row"></div>
+                        </div>
+                    </div>
+
+                    <!-- Alerts -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 style="font-size:16px;font-weight:600;">⚠️ Low Stock Alerts</h3>
+                            <a href="inventory.html" class="btn btn-sm btn-secondary">Manage</a>
+                        </div>
+                        <div class="card-body" id="lowStockAlerts">
+                            <div class="skeleton skeleton-row"></div>
+                            <div class="skeleton skeleton-row"></div>
+                            <div class="skeleton skeleton-row"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+
+        async function loadDashboard() {
+            try {
+                const data = await api.get('admin.php?action=dashboard');
+
+                document.getElementById('statsGrid').innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-icon green">🌱</div>
+                        <div class="stat-info">
+                            <h3>${data.total_plants}</h3>
+                            <p>Total Plants</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">⚠️</div>
+                        <div class="stat-info">
+                            <h3>${data.low_stock + data.out_of_stock}</h3>
+                            <p>Stock Alerts</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon blue">🛒</div>
+                        <div class="stat-info">
+                            <h3>${data.today_orders}</h3>
+                            <p>Orders Today</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon purple">💰</div>
+                        <div class="stat-info">
+                            <h3>${formatCurrency(data.revenue)}</h3>
+                            <p>Total Revenue</p>
+                        </div>
+                    </div>
+                `;
+
+                // Recent Orders
+                if (data.recent_orders && data.recent_orders.length > 0) {
+                    document.getElementById('recentOrders').innerHTML = `
+                        <div class="table-wrapper">
+                            <table>
+                                <thead><tr><th>Order</th><th>Customer</th><th>Amount</th><th>Status</th></tr></thead>
+                                <tbody>
+                                    ${data.recent_orders.map(o => `
+                                        <tr>
+                                            <td>#${o.id}</td>
+                                            <td>${o.customer_name || 'Walk-in'}</td>
+                                            <td>${formatCurrency(o.total_amount)}</td>
+                                            <td>${getStatusBadge(o.status)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('recentOrders').innerHTML = '<div class="empty-state"><p>No orders yet</p></div>';
+                }
+
+                // Low stock
+                loadLowStock();
+            } catch (err) {
+                showToast('Failed to load dashboard', 'error');
+            }
+        }
+
+        async function loadLowStock() {
+            try {
+                const plants = await api.get('inventory.php?alerts=1');
+                const list = Array.isArray(plants) ? plants : [];
+                if (list.length > 0) {
+                    document.getElementById('lowStockAlerts').innerHTML = list.slice(0, 5).map(p => `
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-color);">
+                            <div>
+                                <strong>${p.name}</strong>
+                                <span class="text-muted" style="font-size:12px;margin-left:8px;">${getCategoryBadge(p.category)}</span>
+                            </div>
+                            <div>
+                                ${getStockBadge(p.quantity, p.low_stock_threshold)}
+                                <span style="font-size:13px;margin-left:8px;font-weight:600;">${p.quantity} left</span>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    document.getElementById('lowStockAlerts').innerHTML = '<div class="empty-state"><p>All plants well stocked! 🎉</p></div>';
+                }
+            } catch (e) { }
+        }
+
+        loadDashboard();
+    </script>
+</body>
+
+</html>

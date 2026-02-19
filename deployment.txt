@@ -1,0 +1,194 @@
+===============================================================
+  GreenHaven Plant Nursery — Complete Deployment Guide
+  FREE Deployment: Render.com + Neon PostgreSQL
+===============================================================
+
+Your app has TWO parts:
+  1. DATABASE  → Already hosted FREE on Neon (neon.tech)
+  2. WEB APP   → Will be hosted FREE on Render.com
+
+Total cost: $0/month
+
+===============================================================
+  OPTION 1: DEPLOY ON RENDER.COM (Recommended — 100% Free)
+===============================================================
+
+PREREQUISITES:
+  ✓ A GitHub account (github.com)
+  ✓ A Render account (render.com — sign up with GitHub)
+  ✓ Your Neon database is already set up and working
+
+
+STEP 1: PUSH CODE TO GITHUB
+---------------------------------------------------------------
+  1. Go to https://github.com/new
+  2. Create a new repository called "greenhaven-nursery"
+     - Set it to PRIVATE (your .env has passwords!)
+  3. Open a terminal/PowerShell in your project folder and run:
+
+     git init
+     git add .
+     git commit -m "Initial commit"
+     git branch -M main
+     git remote add origin https://github.com/YOUR_USERNAME/greenhaven-nursery.git
+     git push -u origin main
+
+  IMPORTANT: Make sure your .env file is NOT pushed to GitHub!
+  Create a .gitignore file with this content:
+
+     .env
+     api/fix_db.php
+
+  If you already pushed .env, remove it with:
+     git rm --cached .env
+     git commit -m "Remove .env from tracking"
+     git push
+
+
+STEP 2: CREATE A FREE WEB SERVICE ON RENDER
+---------------------------------------------------------------
+  1. Go to https://dashboard.render.com
+  2. Click "New +" → "Web Service"
+  3. Connect your GitHub account if not already connected
+  4. Select the "greenhaven-nursery" repository
+  5. Configure the service:
+
+     Name:           greenhaven-nursery
+     Region:         Oregon (US West) or closest to you
+     Branch:         main
+     Runtime:        Docker
+     Plan:           Free
+
+  6. Click "Create Web Service"
+
+
+STEP 3: SET ENVIRONMENT VARIABLES ON RENDER
+---------------------------------------------------------------
+  1. In your Render dashboard, click on your service
+  2. Go to "Environment" tab
+  3. Add these environment variables (copy from your .env):
+
+     DB_HOST     = ep-polished-waterfall-ai9taylr-pooler.c-4.us-east-1.aws.neon.tech
+     DB_PORT     = 5432
+     DB_NAME     = neondb
+     DB_USER     = neondb_owner
+     DB_PASSWORD = npg_xgyYkH6b4CIK
+     DB_SSLMODE  = require
+
+  4. Click "Save Changes"
+  5. Render will automatically redeploy with the new variables
+
+
+STEP 4: ACCESS YOUR LIVE APP
+---------------------------------------------------------------
+  After deployment (takes 2-5 minutes), your app will be live at:
+
+     https://greenhaven-nursery.onrender.com
+
+  Login with: admin / admin123
+
+  NOTE: On the free plan, the app "sleeps" after 15 min of
+  inactivity. The first request after sleep takes ~30 seconds
+  to wake up. This is normal for free hosting.
+
+
+===============================================================
+  OPTION 2: DEPLOY ON RAILWAY.APP (Alternative — $1/month free)
+===============================================================
+
+  1. Go to https://railway.app and sign in with GitHub
+  2. Click "New Project" → "Deploy from GitHub Repo"
+  3. Select your repository
+  4. Railway auto-detects the Dockerfile
+  5. Go to Variables tab and add the same DB_* variables
+  6. Railway gives you a free subdomain automatically
+
+  NOTE: Railway gives $1/month free credit. Very small apps
+  like this should stay within the limit.
+
+
+===============================================================
+  OPTION 3: LOCAL DEPLOYMENT (For development/testing)
+===============================================================
+
+PREREQUISITES:
+  - PHP 8.0+ with pdo_pgsql extension
+  - No database install needed (uses cloud Neon DB)
+
+STEPS:
+  1. Open terminal in the project folder
+  2. Start the PHP development server:
+
+     php -S localhost:8000
+
+  3. Open browser to: http://localhost:8000/login.html
+  4. Login: admin / admin123
+
+CHECK PHP EXTENSIONS:
+  Run: php -m | findstr pdo_pgsql
+
+  If pdo_pgsql is missing, enable it in php.ini:
+     extension=pdo_pgsql
+
+  On Windows, also add:
+     extension=php_pgsql.dll
+
+
+===============================================================
+  TROUBLESHOOTING
+===============================================================
+
+PROBLEM: "cached plan must not change result type"
+  → This happens after schema changes on Neon/PgBouncer.
+  → Already fixed in db.php with ATTR_EMULATE_PREPARES.
+
+PROBLEM: "current transaction is aborted"
+  → Already fixed in db.php with ROLLBACK on connect.
+  → If it recurs, run in Neon SQL Editor:
+    ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
+    ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_payment_mode_check;
+    ALTER TABLE plants DROP CONSTRAINT IF EXISTS plants_category_check;
+
+PROBLEM: 500 Internal Server Error on Render
+  → Check Render logs: Dashboard → Your Service → Logs
+  → Verify all environment variables are set correctly
+  → Make sure .env is NOT in the Docker image (check .dockerignore)
+
+PROBLEM: App takes 30+ seconds to load
+  → Normal on Render free tier (cold start after 15 min idle)
+  → Upgrade to Render Starter ($7/mo) for always-on service
+
+
+===============================================================
+  PROJECT STRUCTURE
+===============================================================
+
+  ├── api/                  PHP backend API
+  │   ├── db.php            Database connection + helpers
+  │   ├── admin.php         Authentication + dashboard data
+  │   ├── plants.php        Plant CRUD operations
+  │   ├── orders.php        Order management
+  │   ├── inventory.php     Stock tracking
+  │   ├── customers.php     Customer management
+  │   ├── bills.php         Invoice generation
+  │   └── schedules.php     Care schedule data
+  ├── css/style.css         Complete design system
+  ├── js/app.js             Core JavaScript module
+  ├── database/schema.sql   PostgreSQL schema
+  ├── Dockerfile            Container config for Render
+  ├── render.yaml           Render deployment blueprint
+  ├── .dockerignore         Files excluded from Docker
+  ├── .env                  Environment variables (LOCAL ONLY)
+  └── *.html                Frontend pages
+
+
+===============================================================
+  SECURITY CHECKLIST (Before Going Live)
+===============================================================
+
+  [ ] .env is in .gitignore (NEVER push secrets to GitHub)
+  [ ] Change default admin password in Neon SQL Editor:
+      UPDATE admin SET password_hash = 'YOUR_NEW_PASSWORD'
+      WHERE username = 'admin';
+  [ ] Verify HTTPS is enabled (Render does this automatically)
+  [ ] Consider adding rate limiting for production use

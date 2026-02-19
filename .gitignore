@@ -1,0 +1,15 @@
+# Environment variables (contains secrets)
+.env
+
+# One-time fix scripts
+api/fix_db.php
+
+# IDE / Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

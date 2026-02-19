@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customers — GreenHaven Nursery</title>
+    <meta name="description" content="Manage customer details, contact info, and purchase history">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="app-layout">
+        <aside class="sidebar"></aside>
+        <button class="sidebar-toggle no-print">☰</button>
+
+        <main class="main-content">
+            <div class="page-header">
+                <div>
+                    <h1 class="page-title">Customers</h1>
+                    <p class="page-subtitle">Manage customer information and purchase history</p>
+                </div>
+                <div class="header-actions">
+                    <div class="search-bar">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="custSearch" placeholder="Search customers..."
+                            oninput="handleCustSearch(this.value)">
+                    </div>
+                    <button class="btn btn-primary" onclick="openAddCustomer()">+ Add Customer</button>
+                </div>
+            </div>
+
+            <div class="page-body">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="table-wrapper" id="customersTable">
+                            <div class="skeleton skeleton-row"></div>
+                            <div class="skeleton skeleton-row"></div>
+                            <div class="skeleton skeleton-row"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Purchase History Panel -->
+                <div class="card mt-3" id="historyPanel" style="display:none;">
+                    <div class="card-header">
+                        <h3 style="font-size:16px;font-weight:600;" id="historyTitle">Purchase History</h3>
+                        <button class="btn btn-sm btn-secondary"
+                            onclick="document.getElementById('historyPanel').style.display='none'">✕ Close</button>
+                    </div>
+                    <div class="card-body" id="historyBody"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add/Edit Customer Modal -->
+    <div class="modal-overlay" id="customerModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="custModalTitle">Add Customer</h2>
+                <button class="modal-close" onclick="closeModal('customerModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="custId">
+                <div class="form-group">
+                    <label for="custName">Full Name</label>
+                    <input type="text" id="custName" class="form-control" placeholder="Customer name" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="custEmail">Email</label>
+                        <input type="email" id="custEmail" class="form-control" placeholder="email@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="custPhone">Phone</label>
+                        <input type="tel" id="custPhone" class="form-control" placeholder="+91 ...">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="custAddress">Address</label>
+                    <input type="text" id="custAddress" class="form-control" placeholder="Full address">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('customerModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveCustomer()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let allCustomers = [];
+
+        async function loadCustomers(search = '') {
+            try {
+                let url = 'customers.php';
+                if (search) url += `?search=${encodeURIComponent(search)}`;
+                const res = await api.get(url);
+                allCustomers = res.data || [];
+
+                if (allCustomers.length === 0) {
+                    document.getElementById('customersTable').innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><h3>No customers yet</h3><p>Add your first customer!</p></div>';
+                    return;
+                }
+
+                document.getElementById('customersTable').innerHTML = `
+                    <table>
+                        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Address</th><th>Joined</th><th>Actions</th></tr></thead>
+                        <tbody>
+                            ${allCustomers.map(c => `
+                                <tr>
+                                    <td><strong>${c.name}</strong></td>
+                                    <td class="text-muted">${c.email || '—'}</td>
+                                    <td>${c.phone || '—'}</td>
+                                    <td class="text-muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.address || '—'}</td>
+                                    <td class="text-muted">${formatDate(c.created_at)}</td>
+                                    <td>
+                                        <div style="display:flex;gap:4px;">
+                                            <button class="btn btn-sm btn-secondary" onclick="viewHistory(${c.id})">📋</button>
+                                            <button class="btn btn-sm btn-secondary" onclick="editCustomer(${c.id})">✏️</button>
+                                            <button class="btn btn-sm btn-danger" onclick="deleteCustomer(${c.id})">🗑️</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (err) {
+                showToast('Failed to load customers', 'error');
+            }
+        }
+
+        const handleCustSearch = debounce((v) => loadCustomers(v));
+
+        function openAddCustomer() {
+            document.getElementById('custModalTitle').textContent = 'Add Customer';
+            document.getElementById('custId').value = '';
+            document.getElementById('custName').value = '';
+            document.getElementById('custEmail').value = '';
+            document.getElementById('custPhone').value = '';
+            document.getElementById('custAddress').value = '';
+            openModal('customerModal');
+        }
+
+        function editCustomer(id) {
+            const c = allCustomers.find(x => x.id == id);
+            if (!c) return;
+            document.getElementById('custModalTitle').textContent = 'Edit Customer';
+            document.getElementById('custId').value = c.id;
+            document.getElementById('custName').value = c.name;
+            document.getElementById('custEmail').value = c.email || '';
+            document.getElementById('custPhone').value = c.phone || '';
+            document.getElementById('custAddress').value = c.address || '';
+            openModal('customerModal');
+        }
+
+        async function saveCustomer() {
+            const data = {
+                name: document.getElementById('custName').value,
+                email: document.getElementById('custEmail').value,
+                phone: document.getElementById('custPhone').value,
+                address: document.getElementById('custAddress').value
+            };
+            if (!data.name) { showToast('Name is required', 'warning'); return; }
+
+            try {
+                const id = document.getElementById('custId').value;
+                if (id) {
+                    data.id = parseInt(id);
+                    await api.put('customers.php', data);
+                    showToast('Customer updated!', 'success');
+                } else {
+                    await api.post('customers.php', data);
+                    showToast('Customer added!', 'success');
+                }
+                closeModal('customerModal');
+                loadCustomers();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        }
+
+        async function deleteCustomer(id) {
+            if (!(await confirmAction('Delete this customer?'))) return;
+            try {
+                await api.del(`customers.php?id=${id}`);
+                showToast('Customer deleted', 'success');
+                loadCustomers();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        }
+
+        async function viewHistory(id) {
+            try {
+                const c = await api.get(`customers.php?id=${id}`);
+                const panel = document.getElementById('historyPanel');
+                document.getElementById('historyTitle').textContent = `Purchase History — ${c.name}`;
+
+                const orders = c.orders || [];
+                if (orders.length === 0) {
+                    document.getElementById('historyBody').innerHTML = '<div class="empty-state"><p>No purchase history</p></div>';
+                } else {
+                    document.getElementById('historyBody').innerHTML = `
+                        <table>
+                            <thead><tr><th>Order #</th><th>Amount</th><th>Status</th><th>Date</th><th>Items</th></tr></thead>
+                            <tbody>
+                                ${orders.map(o => {
+                        let items = [];
+                        try { items = typeof o.items === 'string' ? JSON.parse(o.items) : (o.items || []); } catch (e) { }
+                        return `<tr>
+                                        <td>#${o.id}</td>
+                                        <td><strong>${formatCurrency(o.total_amount)}</strong></td>
+                                        <td>${getStatusBadge(o.status)}</td>
+                                        <td class="text-muted">${formatDate(o.created_at)}</td>
+                                        <td class="text-muted">${items.map(i => `${i.plant_name} ×${i.quantity}`).join(', ') || '—'}</td>
+                                    </tr>`;
+                    }).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                }
+                panel.style.display = 'block';
+                panel.scrollIntoView({ behavior: 'smooth' });
+            } catch (err) {
+                showToast('Failed to load history', 'error');
+            }
+        }
+
+        loadCustomers();
+    </script>
+</body>
+
+</html>
