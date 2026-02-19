@@ -266,8 +266,27 @@ function getSidebarHTML(activePage) {
     `;
 }
 
+// ---- Auth Guard ----
+async function checkAuth() {
+    try {
+        const data = await api.get('admin.php?action=status');
+        if (!data.logged_in) {
+            window.location.href = 'login.html';
+            return false;
+        }
+        return true;
+    } catch (e) {
+        window.location.href = 'login.html';
+        return false;
+    }
+}
+
 // ---- Init page with sidebar ----
-function initPage(pageName) {
+async function initPage(pageName) {
+    // Check authentication first
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) return;
+
     const sidebar = document.querySelector('.sidebar');
     if (sidebar) sidebar.innerHTML = getSidebarHTML(pageName);
     initSidebar();
